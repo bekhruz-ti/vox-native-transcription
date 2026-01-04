@@ -1,0 +1,33 @@
+# OpenAI SDK with Realtime API support
+openai>=1.54.0
+
+# WebSocket client for Realtime API
+websockets>=12.0
+
+# HTTP requests (for ElevenLabs batch API)
+requests>=2.31.0
+
+# ElevenLabs SDK (for real-time transcription)
+elevenlabs>=2.27.0
+
+# Environment variable loading
+python-dotenv>=1.0.0
+
+# Audio capture
+sounddevice>=0.4.6
+
+# Audio processing
+numpy>=1.24.0
+
+# Voice Activity Detection (VAD) - Silero-VAD
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# UI Framework
+PySide6>=6.6.0
+
+# System Integration
+keyboard>=0.13.5
+pynput>=1.7.6
+uiautomation>=2.0.18
+
