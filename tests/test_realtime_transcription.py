@@ -30,8 +30,8 @@ if sys.platform == "win32":
 from dotenv import load_dotenv
 load_dotenv()
 
-# Add src to path for imports
-src_path = str(Path(__file__).parent / "src")
+# Add src to path (go up one level from tests/)
+src_path = str(Path(__file__).parent.parent / "src")
 sys.path.insert(0, src_path)
 
 # Import components
@@ -94,7 +94,7 @@ def test_basic_recording():
     print("=" * 60)
     
     recorder = AudioRecorder()
-    output_path = "tests/fixtures/test_recording.wav"
+    output_path = str(Path(__file__).parent / "fixtures" / "test_recording.wav")
     
     print("Recording for 3 seconds... Speak into your microphone!")
     
@@ -241,7 +241,7 @@ def test_batch_transcription_with_recording(provider_name: str = "openai"):
     
     recorder = AudioRecorder()
     
-    output_path = "tests/fixtures/batch_test.wav"
+    output_path = str(Path(__file__).parent / "fixtures" / "batch_test.wav")
     
     print("Recording for 5 seconds... Speak clearly!")
     
@@ -325,4 +325,3 @@ if __name__ == "__main__":
         test_realtime_transcription(provider_name)
     else:
         main()
-

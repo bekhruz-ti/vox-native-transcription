@@ -18,8 +18,8 @@ if sys.platform == "win32":
 from dotenv import load_dotenv
 load_dotenv()
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+# Add src to path (go up one level from tests/)
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from providers.openai_provider import OpenAIProvider
 
@@ -34,7 +34,7 @@ def download_sample_audio():
     # This is a NASA public domain audio clip
     sample_url = "https://www.nasa.gov/wp-content/uploads/2015/01/590325main_ringtone_kennedy_702702.mp3"
     
-    output_path = Path("tests/fixtures/sample.mp3")
+    output_path = Path(__file__).parent / "fixtures" / "sample.mp3"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     if not output_path.exists():

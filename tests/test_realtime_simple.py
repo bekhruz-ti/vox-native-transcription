@@ -18,8 +18,8 @@ if sys.platform == "win32":
 from dotenv import load_dotenv
 load_dotenv()
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+# Add src to path (go up one level from tests/)
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from audio.recorder import AudioRecorder
 from providers.openai_provider import OpenAIProvider
