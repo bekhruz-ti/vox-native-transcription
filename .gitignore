@@ -64,7 +64,14 @@ htmlcov/
 *.log
 logs/
 
-# Distribution
+# Distribution / Packaging
 *.exe
 *.msi
+
+# PyInstaller
+*.manifest
+*.spec.bak
+
+# Inno Setup output (installers are in dist/)
+Output/
 

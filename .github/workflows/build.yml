@@ -1,0 +1,63 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Read version
+        id: version
+        run: |
+          $version = Get-Content VERSION -Raw
+          $version = $version.Trim()
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "Building version: $version"
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller vox-native-transcription.spec
+          echo "PyInstaller build complete"
+          dir dist\Vox
+
+      - name: Build installer with Inno Setup
+        run: |
+          # Inno Setup is pre-installed on GitHub Windows runners
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          echo "Installer built successfully"
+          dir dist\*.exe
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vox-Setup-${{ steps.version.outputs.VERSION }}
+          path: dist/Vox-Setup-*.exe
+          retention-days: 90
+
+      - name: Upload portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vox-Portable-${{ steps.version.outputs.VERSION }}
+          path: dist/Vox/
+          retention-days: 90
