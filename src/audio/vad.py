@@ -2,7 +2,7 @@
 Voice Activity Detection (VAD) module.
 
 This module provides speech detection functionality using:
-1. Silero-VAD - A lightweight neural network-based VAD
+1. WebRTC VAD - Google's lightweight, fast voice activity detector
 2. Energy-based thresholding - A fast pre-filter for quiet audio
 
 Used to filter out background noise before sending audio to transcription.
@@ -11,50 +11,53 @@ Used to filter out background noise before sending audio to transcription.
 import numpy as np
 from typing import Optional
 
-# Lazy-load torch to avoid slow imports
-_vad_model = None
-_vad_utils = None
+import webrtcvad
+
+# Lazy-load VAD instance
+_vad_instance: Optional[webrtcvad.Vad] = None
 
 
-def _load_silero_vad():
+def _get_vad(aggressiveness: int = 1) -> webrtcvad.Vad:
     """
-    Lazy-load Silero-VAD model.
+    Get or create WebRTC VAD instance.
+    
+    Args:
+        aggressiveness: VAD aggressiveness mode (0-3).
+                        0 = least aggressive (most permissive)
+                        3 = most aggressive (filters more)
     
     Returns:
-        Tuple of (model, utils) or (None, None) if loading fails.
+        WebRTC VAD instance.
     """
-    global _vad_model, _vad_utils
+    global _vad_instance
     
-    if _vad_model is not None:
-        return _vad_model, _vad_utils
+    if _vad_instance is None:
+        _vad_instance = webrtcvad.Vad()
     
-    try:
-        import torch
-        torch.set_num_threads(1)  # Limit CPU usage
-        
-        # Load Silero-VAD model from torch hub
-        model, utils = torch.hub.load(
-            repo_or_dir='snakers4/silero-vad',
-            model='silero_vad',
-            force_reload=False,
-            trust_repo=True
-        )
-        
-        _vad_model = model
-        _vad_utils = utils
-        return _vad_model, _vad_utils
-        
-    except Exception as e:
-        print(f"Warning: Could not load Silero-VAD: {e}")
-        return None, None
+    _vad_instance.set_mode(aggressiveness)
+    return _vad_instance
 
+
+def _threshold_to_aggressiveness(threshold: float) -> int:
+    """
+    Map vad_threshold (0-1) to WebRTC aggressiveness (0-3).
+    
+    Lower threshold = more permissive = lower aggressiveness.
+    
+    Args:
+        threshold: Speech detection threshold (0-1).
+    
+    Returns:
+        WebRTC aggressiveness mode (0-3).
+    """
+    return min(3, max(0, int(threshold * 3)))
 
 def audio_energy(pcm_bytes: bytes) -> float:
     """
     Calculate RMS energy of audio chunk.
     
     This is a fast pre-filter to discard very quiet audio
-    before running the more expensive VAD model.
+    before running the VAD.
     
     Args:
         pcm_bytes: Raw PCM16 audio data (16-bit signed integers).
@@ -103,66 +106,67 @@ def has_speech_vad(
     threshold: float = 0.3
 ) -> bool:
     """
-    Check if audio contains speech using Silero-VAD neural network.
+    Check if audio contains speech using WebRTC VAD.
     
-    This is more accurate than energy-based detection but slower.
-    Use after energy pre-filter for best performance.
-    
-    Note: Silero-VAD requires exactly 512 samples at 16kHz (32ms windows).
-    This function automatically chunks audio into proper window sizes.
+    WebRTC VAD requires frames of exactly 10, 20, or 30 ms.
+    This function automatically chunks audio into proper frame sizes.
     
     Args:
         pcm_bytes: Raw PCM16 audio data (16kHz, mono, 16-bit).
-        sample_rate: Sample rate of audio (default 16000).
-        threshold: Speech probability threshold (0-1).
+        sample_rate: Sample rate of audio (8000, 16000, 32000, or 48000).
+        threshold: Speech detection threshold (0-1).
                    Lower = more permissive, catches more speech.
                    Default 0.3 is permissive to avoid missing speech.
     
     Returns:
-        True if speech is detected with confidence above threshold.
+        True if speech is detected in any frame.
     """
-    model, utils = _load_silero_vad()
+    if not pcm_bytes:
+        return False
     
-    if model is None:
-        # Fallback to energy-based detection if VAD not available
+    # Validate sample rate
+    if sample_rate not in (8000, 16000, 32000, 48000):
+        # Fallback to energy-based detection
         return has_speech_energy(pcm_bytes)
     
     try:
-        import torch
+        aggressiveness = _threshold_to_aggressiveness(threshold)
+        vad = _get_vad(aggressiveness)
         
-        # Silero-VAD requires exactly 512 samples at 16kHz (or 256 at 8kHz)
-        window_size = 512 if sample_rate == 16000 else 256
+        # WebRTC VAD requires 10, 20, or 30 ms frames
+        # Use 30ms frames for better accuracy
+        # samples_per_frame = sample_rate * frame_duration_ms / 1000
+        frame_duration_ms = 30
+        samples_per_frame = sample_rate * frame_duration_ms // 1000
+        bytes_per_frame = samples_per_frame * 2  # 16-bit = 2 bytes
         
-        # Convert bytes to float tensor (-1 to 1 range)
-        samples = np.frombuffer(pcm_bytes, dtype=np.int16)
-        audio_float = samples.astype(np.float32) / 32768.0
+        # Process audio in frames
+        num_frames = len(pcm_bytes) // bytes_per_frame
         
-        # If audio is shorter than window size, pad with zeros
-        if len(audio_float) < window_size:
-            audio_float = np.pad(audio_float, (0, window_size - len(audio_float)))
-        
-        # Process audio in 512-sample windows, check if any has speech
-        max_prob = 0.0
-        num_windows = len(audio_float) // window_size
-        
-        for i in range(num_windows):
-            start = i * window_size
-            end = start + window_size
-            window = audio_float[start:end]
+        if num_frames == 0:
+            # Audio too short, check if we can use 10ms frame
+            frame_duration_ms = 10
+            samples_per_frame = sample_rate * frame_duration_ms // 1000
+            bytes_per_frame = samples_per_frame * 2
+            num_frames = len(pcm_bytes) // bytes_per_frame
             
-            audio_tensor = torch.from_numpy(window)
-            prob = model(audio_tensor, sample_rate).item()
-            max_prob = max(max_prob, prob)
+            if num_frames == 0:
+                # Still too short, fallback to energy
+                return has_speech_energy(pcm_bytes)
+        
+        # Check each frame for speech
+        for i in range(num_frames):
+            start = i * bytes_per_frame
+            end = start + bytes_per_frame
+            frame = pcm_bytes[start:end]
             
-            # Early exit if we find speech
-            if prob >= threshold:
+            if vad.is_speech(frame, sample_rate):
                 return True
         
-        return max_prob >= threshold
+        return False
         
-    except Exception as e:
+    except Exception:
         # Fallback to energy-based detection on error
-        print(f"VAD error, falling back to energy: {e}")
         return has_speech_energy(pcm_bytes)
 
 
@@ -183,8 +187,8 @@ def has_speech(
         pcm_bytes: Raw PCM16 audio data (16kHz, mono, 16-bit).
         sample_rate: Sample rate of audio (default 16000).
         energy_threshold: Minimum RMS energy to process (default 100).
-        vad_threshold: Speech probability threshold for VAD (default 0.3).
-        use_vad: Whether to use Silero-VAD (default True).
+        vad_threshold: Speech detection threshold for VAD (default 0.3).
+        use_vad: Whether to use WebRTC VAD (default True).
                  If False, only energy threshold is used.
     
     Returns:
@@ -194,7 +198,7 @@ def has_speech(
     if not has_speech_energy(pcm_bytes, energy_threshold):
         return False
     
-    # Step 2: VAD check if enabled (more accurate but slower)
+    # Step 2: VAD check if enabled
     if use_vad:
         return has_speech_vad(pcm_bytes, sample_rate, vad_threshold)
     
@@ -207,12 +211,12 @@ class VoiceActivityDetector:
     Voice Activity Detector with configurable thresholds.
     
     Provides a reusable object for detecting speech in audio chunks.
-    Combines fast energy-based pre-filtering with accurate neural VAD.
+    Combines fast energy-based pre-filtering with WebRTC VAD.
     
     Attributes:
         energy_threshold: Minimum RMS energy to process.
-        vad_threshold: Speech probability threshold (0-1).
-        enable_vad: Whether to use Silero-VAD neural network.
+        vad_threshold: Speech detection threshold (0-1).
+        enable_vad: Whether to use WebRTC VAD.
         sample_rate: Expected sample rate of audio.
     """
     
@@ -228,18 +232,19 @@ class VoiceActivityDetector:
         
         Args:
             energy_threshold: Minimum RMS energy to process (default 100).
-            vad_threshold: Speech probability threshold (default 0.3).
-            enable_vad: Use Silero-VAD neural network (default True).
+            vad_threshold: Speech detection threshold (default 0.3).
+            enable_vad: Use WebRTC VAD (default True).
             sample_rate: Expected audio sample rate (default 16000).
         """
         self.energy_threshold = energy_threshold
         self.vad_threshold = vad_threshold
         self.enable_vad = enable_vad
         self.sample_rate = sample_rate
+        self._aggressiveness = _threshold_to_aggressiveness(vad_threshold)
         
-        # Pre-load VAD model if enabled
+        # Pre-initialize VAD if enabled
         if enable_vad:
-            _load_silero_vad()
+            _get_vad(self._aggressiveness)
     
     def has_speech(self, pcm_bytes: bytes) -> bool:
         """
@@ -273,47 +278,46 @@ class VoiceActivityDetector:
     
     def get_speech_probability(self, pcm_bytes: bytes) -> float:
         """
-        Get max speech probability from VAD model across all windows.
+        Get speech detection ratio from VAD across all frames.
+        
+        Note: WebRTC VAD returns binary speech/no-speech, not probability.
+        This returns the ratio of frames detected as speech (0-1).
         
         Args:
             pcm_bytes: Raw PCM16 audio data.
         
         Returns:
-            Max speech probability (0-1), or -1 if VAD not available.
+            Ratio of frames with speech (0-1), or -1 if VAD not available.
         """
-        model, _ = _load_silero_vad()
+        if not pcm_bytes or not self.enable_vad:
+            return -1.0
         
-        if model is None:
+        if self.sample_rate not in (8000, 16000, 32000, 48000):
             return -1.0
         
         try:
-            import torch
+            vad = _get_vad(self._aggressiveness)
             
-            # Silero-VAD requires exactly 512 samples at 16kHz
-            window_size = 512 if self.sample_rate == 16000 else 256
+            # Use 30ms frames
+            frame_duration_ms = 30
+            samples_per_frame = self.sample_rate * frame_duration_ms // 1000
+            bytes_per_frame = samples_per_frame * 2
             
-            samples = np.frombuffer(pcm_bytes, dtype=np.int16)
-            audio_float = samples.astype(np.float32) / 32768.0
+            num_frames = len(pcm_bytes) // bytes_per_frame
             
-            # If audio is shorter than window size, pad with zeros
-            if len(audio_float) < window_size:
-                audio_float = np.pad(audio_float, (0, window_size - len(audio_float)))
+            if num_frames == 0:
+                return -1.0
             
-            # Process audio in windows, return max probability
-            max_prob = 0.0
-            num_windows = len(audio_float) // window_size
-            
-            for i in range(num_windows):
-                start = i * window_size
-                end = start + window_size
-                window = audio_float[start:end]
+            speech_frames = 0
+            for i in range(num_frames):
+                start = i * bytes_per_frame
+                end = start + bytes_per_frame
+                frame = pcm_bytes[start:end]
                 
-                audio_tensor = torch.from_numpy(window)
-                prob = model(audio_tensor, self.sample_rate).item()
-                max_prob = max(max_prob, prob)
+                if vad.is_speech(frame, self.sample_rate):
+                    speech_frames += 1
             
-            return max_prob
+            return speech_frames / num_frames
             
         except Exception:
             return -1.0
-
