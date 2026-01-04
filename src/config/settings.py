@@ -18,7 +18,7 @@ class Settings:
     Settings are stored at %APPDATA%/InputSTT/settings.json on Windows.
     
     Default settings:
-        - hotkey: "ctrl+shift+space"
+        - hotkey: "win+alt+j"
         - audio_device: null (system default)
         - language: "en"
     
@@ -30,7 +30,7 @@ class Settings:
     """
     
     DEFAULT_SETTINGS = {
-        "hotkey": "ctrl+shift+space",
+        "hotkey": "win+alt+j",
         "audio_device": None,
         "language": "en",
     }

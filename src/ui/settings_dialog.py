@@ -164,7 +164,7 @@ class SettingsDialog(QDialog):
         
         self._settings = settings
         self._hotkey_manager = hotkey_manager
-        self._original_hotkey = settings.get("hotkey", "ctrl+shift+space")
+        self._original_hotkey = settings.get("hotkey", "win+alt+j")
         
         self.setWindowTitle("Input-STT Settings")
         self.setFixedSize(400, 200)

@@ -23,7 +23,7 @@ class HotkeyManager(QObject):
     Example:
         manager = HotkeyManager()
         manager.triggered.connect(on_hotkey_pressed)
-        manager.register("ctrl+shift+space")
+        manager.register("win+alt+j")
         
         # Later...
         manager.unregister()
