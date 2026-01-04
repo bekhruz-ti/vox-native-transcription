@@ -72,6 +72,9 @@ logs/
 *.manifest
 *.spec.bak
 
+# Auto-generated version file (created during build)
+VERSION
+
 # Inno Setup output (installers are in dist/)
 Output/
 

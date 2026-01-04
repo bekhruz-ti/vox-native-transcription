@@ -4,14 +4,67 @@ PyInstaller spec file for Vox Native Transcription.
 
 Build with: pyinstaller vox-native-transcription.spec
 Output will be in dist/Vox/
+
+Version is auto-detected from:
+1. VERSION file (if exists, e.g., written by CI)
+2. Git tag (git describe --tags)
+3. Fallback to 0.0.0-dev
 """
 
 import os
+import subprocess
 
-# Read version from VERSION file
-with open('VERSION', 'r') as f:
-    version = f.read().strip()
 
+def get_version():
+    """
+    Get version from VERSION file or git tags.
+    
+    Priority:
+    1. VERSION file (written by CI or manual)
+    2. Git tag (for local builds)
+    3. Fallback to 0.0.0-dev
+    """
+    # Try VERSION file first (CI writes this)
+    if os.path.exists('VERSION'):
+        with open('VERSION', 'r') as f:
+            version = f.read().strip()
+            if version:
+                print(f"Version from VERSION file: {version}")
+                return version
+    
+    # Try git describe
+    try:
+        result = subprocess.run(
+            ['git', 'describe', '--tags', '--abbrev=0'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        tag = result.stdout.strip()
+        # Strip 'v' prefix if present
+        version = tag[1:] if tag.startswith('v') else tag
+        print(f"Version from git tag: {version}")
+        
+        # Write VERSION file for Inno Setup to read
+        with open('VERSION', 'w') as f:
+            f.write(version)
+        
+        return version
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    
+    # Fallback
+    version = '0.0.0-dev'
+    print(f"No version found, using fallback: {version}")
+    
+    # Write VERSION file for Inno Setup to read
+    with open('VERSION', 'w') as f:
+        f.write(version)
+    
+    return version
+
+
+version = get_version()
 block_cipher = None
 
 # Data files to include

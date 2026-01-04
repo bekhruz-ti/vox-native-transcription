@@ -1,11 +1,9 @@
-name: Build Windows Installer
+name: Build and Release
 
 on:
   push:
-    branches: [main]
-    paths: ['VERSION']  # Only build when VERSION changes
-    tags: ['v*']  # Trigger on version tags
-  workflow_dispatch:  # Allow manual trigger
+    tags: ['v*']  # Only trigger on version tags
+  workflow_dispatch:  # Allow manual trigger for testing
 
 jobs:
   build:
@@ -14,6 +12,24 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git describe
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Get version from tag, strip 'v' prefix
+          $tag = "${{ github.ref_name }}"
+          if ($tag -match '^v(.+)$') {
+            $version = $Matches[1]
+          } else {
+            $version = $tag
+          }
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "Building version: $version"
+          
+          # Write VERSION file for PyInstaller and Inno Setup
+          Set-Content -Path "VERSION" -Value $version -NoNewline
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -26,14 +42,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-
-      - name: Read version
-        id: version
-        run: |
-          $version = Get-Content VERSION -Raw
-          $version = $version.Trim()
-          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-          echo "Building version: $version"
 
       - name: Build with PyInstaller
         run: |
@@ -54,22 +62,7 @@ jobs:
           echo "Portable zip created"
           dir dist\*.zip
 
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Vox-Setup-${{ steps.version.outputs.VERSION }}
-          path: dist/Vox-Setup-*.exe
-          retention-days: 90
-
-      - name: Upload portable build
-        uses: actions/upload-artifact@v4
-        with:
-          name: Vox-Portable-${{ steps.version.outputs.VERSION }}
-          path: dist/Vox/
-          retention-days: 90
-
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: Vox ${{ steps.version.outputs.VERSION }}
