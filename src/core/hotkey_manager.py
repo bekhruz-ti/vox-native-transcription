@@ -1,29 +1,30 @@
 """
 Global hotkey manager for Input-STT application.
 
-Uses the `keyboard` library to register system-wide hotkeys
+Uses the `pynput` library to register system-wide hotkeys
 that work regardless of which application has focus.
+Does not require administrator privileges on Windows.
 """
 
 import threading
-from typing import Callable, Optional
+from typing import Optional
 
-import keyboard
-from PySide6.QtCore import QObject, Signal, QMetaObject, Qt, Q_ARG
+from pynput import keyboard
+from PySide6.QtCore import QObject, Signal
 
 
 class HotkeyManager(QObject):
     """
     Manages global keyboard shortcuts.
     
-    Uses the `keyboard` library to listen for hotkeys system-wide.
+    Uses the `pynput` library to listen for hotkeys system-wide.
     Emits Qt signals when hotkeys are triggered, ensuring thread-safe
     communication with the UI.
     
     Example:
         manager = HotkeyManager()
         manager.triggered.connect(on_hotkey_pressed)
-        manager.register("win+alt+j")
+        manager.register("<cmd>+<alt>+j")
         
         # Later...
         manager.unregister()
@@ -41,7 +42,7 @@ class HotkeyManager(QObject):
         """
         super().__init__(parent)
         self._current_hotkey: Optional[str] = None
-        self._hook_registered = False
+        self._listener: Optional[keyboard.GlobalHotKeys] = None
         self._lock = threading.Lock()
     
     @property
@@ -52,7 +53,7 @@ class HotkeyManager(QObject):
     @property
     def is_registered(self) -> bool:
         """Check if a hotkey is currently registered."""
-        return self._hook_registered
+        return self._listener is not None
     
     def register(self, hotkey: str) -> bool:
         """
@@ -61,27 +62,26 @@ class HotkeyManager(QObject):
         If a hotkey is already registered, it will be unregistered first.
         
         Args:
-            hotkey: The hotkey combination (e.g., "ctrl+shift+space").
+            hotkey: The hotkey combination in pynput format (e.g., "<ctrl>+<shift>+j").
         
         Returns:
             True if registration succeeded, False otherwise.
         """
         with self._lock:
             # Unregister existing hotkey if any
-            if self._hook_registered:
+            if self._listener is not None:
                 self._unregister_internal()
             
             try:
-                keyboard.add_hotkey(
-                    hotkey,
-                    self._on_hotkey_pressed,
-                    suppress=False  # Don't block the key from other apps
-                )
+                self._listener = keyboard.GlobalHotKeys({
+                    hotkey: self._on_hotkey_pressed
+                })
+                self._listener.start()
                 self._current_hotkey = hotkey
-                self._hook_registered = True
                 return True
             except Exception as e:
                 print(f"Failed to register hotkey '{hotkey}': {e}")
+                self._listener = None
                 return False
     
     def unregister(self) -> None:
@@ -95,20 +95,19 @@ class HotkeyManager(QObject):
     
     def _unregister_internal(self) -> None:
         """Internal unregister without lock (must be called with lock held)."""
-        if self._hook_registered and self._current_hotkey:
+        if self._listener is not None:
             try:
-                keyboard.remove_hotkey(self._current_hotkey)
-            except (KeyError, ValueError):
-                # Hotkey might already be removed
+                self._listener.stop()
+            except Exception:
                 pass
-            self._hook_registered = False
+            self._listener = None
             self._current_hotkey = None
     
     def _on_hotkey_pressed(self) -> None:
         """
-        Callback invoked by keyboard library when hotkey is pressed.
+        Callback invoked by pynput when hotkey is pressed.
         
-        This runs in the keyboard library's thread, so we use
+        This runs in the pynput listener's thread, so we use
         Qt's thread-safe signal emission.
         """
         # Emit signal - this is thread-safe in PySide6
@@ -133,5 +132,3 @@ class HotkeyManager(QObject):
         Should be called when the application is shutting down.
         """
         self.unregister()
-
-

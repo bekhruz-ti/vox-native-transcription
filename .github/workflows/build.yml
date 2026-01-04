@@ -3,6 +3,7 @@ name: Build Windows Installer
 on:
   push:
     branches: [main]
+    tags: ['v*']  # Trigger on version tags
   pull_request:
     branches: [main]
   workflow_dispatch:  # Allow manual trigger
@@ -48,6 +49,12 @@ jobs:
           echo "Installer built successfully"
           dir dist\*.exe
 
+      - name: Create portable zip
+        run: |
+          Compress-Archive -Path dist\Vox\* -DestinationPath dist\Vox-Portable-${{ steps.version.outputs.VERSION }}.zip
+          echo "Portable zip created"
+          dir dist\*.zip
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
@@ -61,3 +68,15 @@ jobs:
           name: Vox-Portable-${{ steps.version.outputs.VERSION }}
           path: dist/Vox/
           retention-days: 90
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Vox ${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
+          files: |
+            dist/Vox-Setup-${{ steps.version.outputs.VERSION }}.exe
+            dist/Vox-Portable-${{ steps.version.outputs.VERSION }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

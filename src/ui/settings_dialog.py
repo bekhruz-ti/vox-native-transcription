@@ -40,13 +40,22 @@ class HotkeyEdit(QLineEdit):
     
     @property
     def hotkey(self) -> str:
-        """Get the current hotkey string."""
+        """Get the current hotkey string in pynput format."""
         return self._hotkey
     
     def set_hotkey(self, hotkey: str) -> None:
         """Set the hotkey string."""
         self._hotkey = hotkey
-        self.setText(hotkey.replace("+", " + ").title())
+        self.setText(self._format_display(hotkey))
+    
+    def _format_display(self, hotkey: str) -> str:
+        """Format hotkey for display (strip angle brackets, add spaces)."""
+        # Remove angle brackets and format nicely
+        display = hotkey.replace("<", "").replace(">", "")
+        display = display.replace("+", " + ")
+        # Replace cmd with Win for display
+        display = display.replace("cmd", "Win")
+        return display.title()
     
     def focusInEvent(self, event) -> None:
         """Handle focus in - start capturing."""
@@ -79,12 +88,12 @@ class HotkeyEdit(QLineEdit):
             }
         """)
         if self._hotkey:
-            self.setText(self._hotkey.replace("+", " + ").title())
+            self.setText(self._format_display(self._hotkey))
         else:
             self.setText("")
     
     def keyPressEvent(self, event) -> None:
-        """Handle key press - capture hotkey."""
+        """Handle key press - capture hotkey in pynput format."""
         if not self._is_capturing:
             super().keyPressEvent(event)
             return
@@ -93,16 +102,16 @@ class HotkeyEdit(QLineEdit):
         modifiers = event.modifiers()
         key = event.key()
         
-        # Build modifier list
+        # Build modifier list in pynput format
         mod_parts = []
         if modifiers & Qt.ControlModifier:
-            mod_parts.append("ctrl")
+            mod_parts.append("<ctrl>")
         if modifiers & Qt.AltModifier:
-            mod_parts.append("alt")
+            mod_parts.append("<alt>")
         if modifiers & Qt.ShiftModifier:
-            mod_parts.append("shift")
+            mod_parts.append("<shift>")
         if modifiers & Qt.MetaModifier:
-            mod_parts.append("win")
+            mod_parts.append("<cmd>")
         
         # Get key name
         key_name = ""
@@ -110,26 +119,27 @@ class HotkeyEdit(QLineEdit):
             key_seq = QKeySequence(key)
             key_name = key_seq.toString().lower()
             
-            # Special key name mappings
+            # Special key name mappings for pynput
             key_map = {
-                "space": "space",
-                " ": "space",
-                "return": "enter",
-                "enter": "enter",
+                "space": "<space>",
+                " ": "<space>",
+                "return": "<enter>",
+                "enter": "<enter>",
             }
             key_name = key_map.get(key_name, key_name)
         
-        # Build hotkey string
+        # Build hotkey string in pynput format
         if mod_parts and key_name:
             self._hotkey = "+".join(mod_parts + [key_name])
-            self.setText(self._hotkey.replace("+", " + ").title())
+            self.setText(self._format_display(self._hotkey))
             self.hotkey_changed.emit(self._hotkey)
             
             # Auto-defocus after successful capture
             self.clearFocus()
         elif mod_parts:
-            # Show current modifiers
-            self.setText(" + ".join(mod_parts).title() + " + ...")
+            # Show current modifiers (display format)
+            display_mods = [m.replace("<", "").replace(">", "").replace("cmd", "Win") for m in mod_parts]
+            self.setText(" + ".join(display_mods).title() + " + ...")
     
     def keyReleaseEvent(self, event) -> None:
         """Handle key release."""
@@ -164,7 +174,7 @@ class SettingsDialog(QDialog):
         
         self._settings = settings
         self._hotkey_manager = hotkey_manager
-        self._original_hotkey = settings.get("hotkey", "win+alt+j")
+        self._original_hotkey = settings.get("hotkey", "<cmd>+<alt>+j")
         
         self.setWindowTitle("Input-STT Settings")
         self.setFixedSize(400, 200)

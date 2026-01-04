@@ -116,7 +116,7 @@ class STTApplication(QObject):
             self._hotkey_manager.triggered.connect(self._on_hotkey_triggered)
             
             # Register hotkey
-            hotkey = self._settings.get("hotkey", "win+alt+j")
+            hotkey = self._settings.get("hotkey", "<cmd>+<alt>+j")
             if not self._hotkey_manager.register(hotkey):
                 print(f"Warning: Failed to register hotkey '{hotkey}'")
             
