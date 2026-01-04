@@ -3,9 +3,8 @@ name: Build Windows Installer
 on:
   push:
     branches: [main]
+    paths: ['VERSION']  # Only build when VERSION changes
     tags: ['v*']  # Trigger on version tags
-  pull_request:
-    branches: [main]
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
