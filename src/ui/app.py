@@ -13,7 +13,6 @@ from PySide6.QtCore import QObject, Signal, Slot
 from ..config.settings import Settings
 from ..core.hotkey_manager import HotkeyManager
 from ..core.session import RecordingSession, SessionState
-from ..core.focus_detector import FocusDetector
 from ..core.text_injector import TextInjector
 from ..audio.recorder import AudioRecorder
 from ..providers.openai_provider import OpenAIProvider
@@ -58,8 +57,6 @@ class STTApplication(QObject):
         self._recorder: Optional[AudioRecorder] = None
         self._provider = None
         
-        # Focus detection and text injection
-        self._focus_detector = FocusDetector()
         self._text_injector = TextInjector(typing_delay=0.001)
         
         # Overlay windows (lazy initialization)
@@ -159,7 +156,6 @@ class STTApplication(QObject):
         session = RecordingSession(
             recorder=self._recorder,
             provider=self._provider,
-            focus_detector=self._focus_detector,
             text_injector=self._text_injector,
             language=self._settings.get("language", "en"),
             silence_threshold_db=-45.0,  # Less sensitive (was -40)
@@ -262,11 +258,7 @@ class STTApplication(QObject):
         self.text_ready.emit(text)
         
         # Toast is already updated via _on_text_chunk with COMPLETE status
-        # Just log the mode for debugging
-        if self._session and self._session.is_text_field_mode:
-            print("[DEBUG] Text field mode - text was injected")
-        else:
-            print("[DEBUG] No text field mode - click toast to copy")
+        print("[DEBUG] Text injected into the focused window; toast can be clicked to copy")
     
     @Slot(str)
     def _on_session_error(self, message: str) -> None:

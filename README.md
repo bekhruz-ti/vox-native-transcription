@@ -8,7 +8,7 @@ A Windows desktop speech-to-text tool with real-time transcription streaming. Pr
 
 - **Global Hotkey** — Press `Win+Alt+J` from anywhere to start/stop recording
 - **Real-time Streaming** — See your words transcribed as you speak
-- **Smart Text Injection** — Automatically types into focused text fields
+- **Text Injection** — Types the transcription into whatever has keyboard focus
 - **Floating Toast** — Beautiful notification showing live transcription
 - **Click to Copy** — When no text field is focused, click the toast to copy
 - **System Tray** — Runs quietly in the background
@@ -63,13 +63,23 @@ Launch `Vox.exe`. You'll see a waveform icon appear in your system tray.
 | **Start Recording** | Press `Win+Alt+J` or double-click the tray icon |
 | **Stop Recording** | Press `Win+Alt+J` again |
 | **Copy Transcription** | Click the toast notification |
+| **Where text goes** | Typed into whatever has keyboard focus |
 | **Open Settings** | Right-click tray icon → Settings |
 | **Exit** | Right-click tray icon → Exit |
 
 ### Text Injection
 
-- **If a text field is focused**: The transcribed text is automatically typed into it
-- **If no text field is focused**: The text appears in a toast — click to copy to clipboard
+The transcription is typed into whatever currently has keyboard focus, and is
+simultaneously shown in the toast so you can click it to copy instead.
+
+Vox does not try to detect whether the focused element accepts text. UI Automation
+cannot reliably classify modern editors — Chromium and Electron text areas (Chrome,
+VS Code, Slack, Discord, and any web `contenteditable`) report as `GroupControl` or
+`PaneControl` rather than `EditControl`. Guessing meant text silently went nowhere in
+those apps, so Vox now always types, like the built-in Windows dictation does.
+
+The trade-off: if you trigger the hotkey while a non-text window has focus, the
+keystrokes go to that window and may activate its single-key shortcuts.
 
 ## Configuration
 

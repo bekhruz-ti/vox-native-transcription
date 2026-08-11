@@ -23,7 +23,6 @@ from .core import (
     RecordingSession,
     SessionState,
     SilenceDetector,
-    FocusDetector,
     TextInjector,
 )
 
@@ -41,7 +40,6 @@ __all__ = [
     "RecordingSession",
     "SessionState",
     "SilenceDetector",
-    "FocusDetector",
     "TextInjector",
     # Config
     "Settings",

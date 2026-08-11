@@ -268,7 +268,7 @@ class RecordingSession(QObject):
     - Audio recording via AudioRecorder
     - Speech-to-text via GenAIProvider
     - Silence detection
-    - Text injection based on focus detection
+    - Text injection into the focused application
     
     Signals:
         state_changed: Emitted when session state changes.
@@ -294,7 +294,6 @@ class RecordingSession(QObject):
         self,
         recorder,  # AudioRecorder
         provider,  # GenAIProvider
-        focus_detector=None,  # FocusDetector
         text_injector=None,   # TextInjector
         language: Optional[str] = None,
         silence_threshold_db: float = -40.0,
@@ -308,7 +307,6 @@ class RecordingSession(QObject):
         Args:
             recorder: AudioRecorder instance.
             provider: GenAIProvider instance.
-            focus_detector: Optional FocusDetector instance.
             text_injector: Optional TextInjector instance.
             language: Language code for transcription.
             silence_threshold_db: Silence detection threshold.
@@ -320,7 +318,6 @@ class RecordingSession(QObject):
         
         self._recorder = recorder
         self._provider = provider
-        self._focus_detector = focus_detector
         self._text_injector = text_injector
         self._language = language
         self._realtime_mode = realtime_mode
@@ -336,7 +333,6 @@ class RecordingSession(QObject):
         # State
         self._state = SessionState.IDLE
         self._worker: Optional[RecordingWorker] = None
-        self._is_text_field_mode = False
         self._last_text = ""
         self._output_type: Optional[TranscriptionOutputType] = None
         self._final_text = ""
@@ -350,11 +346,6 @@ class RecordingSession(QObject):
     def is_recording(self) -> bool:
         """Check if currently recording."""
         return self._state == SessionState.RECORDING
-    
-    @property
-    def is_text_field_mode(self) -> bool:
-        """Check if operating in text field injection mode."""
-        return self._is_text_field_mode
     
     def toggle(self) -> None:
         """
@@ -372,17 +363,11 @@ class RecordingSession(QObject):
         """
         Start a new recording session.
         
-        Detects if a text field is focused to determine the operation mode:
-        - Text field mode: Real-time injection as user speaks
-        - No text field: Show toast notification after recording
+        The transcription is typed into whatever currently has keyboard focus,
+        and mirrored in the toast so it can still be copied by clicking.
         """
         if self._state != SessionState.IDLE:
             return
-        
-        # Check focus state
-        self._is_text_field_mode = False
-        if self._focus_detector and self._focus_detector.is_available:
-            self._is_text_field_mode = self._focus_detector.is_text_input_focused()
         
         # Reset state
         self._last_text = ""
@@ -393,11 +378,8 @@ class RecordingSession(QObject):
         if self._text_injector:
             self._text_injector.reset_incremental()
         
-        # Determine mode:
-        # - Text field focused: use real-time transcription + injection
-        # - No text field: use batch transcription + toast
-        use_realtime = self._realtime_mode and self._is_text_field_mode
-        print(f"[SESSION] use_realtime={use_realtime} (realtime_mode={self._realtime_mode}, text_field_mode={self._is_text_field_mode})")
+        use_realtime = self._realtime_mode
+        print(f"[SESSION] use_realtime={use_realtime}")
         
         # Create and start worker
         self._worker = RecordingWorker(
@@ -455,7 +437,7 @@ class RecordingSession(QObject):
         self.text_chunk.emit(output)
         
         # Handle text injection based on output type
-        if self._is_text_field_mode and self._text_injector:
+        if self._text_injector:
             if output.type == TranscriptionOutputType.CUMULATIVE:
                 # CUMULATIVE: ONLY inject on COMPLETE - no live updates
                 if output.status == TranscriptionStatus.COMPLETE:
