@@ -31,6 +31,31 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+ERROR_ALREADY_EXISTS = 183
+
+
+def is_already_running() -> bool:
+    """
+    Check whether another Vox instance is already live.
+
+    Each instance registers its own global hotkey listener, so a second one
+    makes every keypress toggle recording twice.
+
+    Returns:
+        True if another instance already holds the lock.
+    """
+    if sys.platform != "win32":
+        return False
+
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    # The handle is deliberately never closed: Windows releases the named
+    # mutex when the process exits, including on a crash.
+    kernel32.CreateMutexW(None, False, "Vox-Native-Transcription-SingleInstance")
+    return ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+
+
 def check_requirements() -> bool:
     """Check that all requirements are met."""
     # Check for Windows
@@ -55,6 +80,10 @@ def main() -> int:
         Exit code (0 for success, non-zero for error).
     """
     print("Starting Input-STT...")
+    
+    if is_already_running():
+        print("Vox is already running - check the system tray.")
+        return 0
     
     # Check requirements
     if not check_requirements():
