@@ -31,9 +31,7 @@ PrivilegesRequired=lowest
 ; Output settings
 OutputDir=dist
 OutputBaseFilename=Vox-Setup-{#MyAppVersion}
-SetupIconFile=
-; Uncomment and set path when you have an icon:
-; SetupIconFile=src\ui\resources\icons\app.ico
+SetupIconFile=src\ui\resources\icons\app.ico
 
 ; Compression
 Compression=lzma2/ultra64

@@ -20,7 +20,8 @@ sounddevice>=0.4.6
 numpy>=1.24.0
 
 # Voice Activity Detection (VAD) - WebRTC
-webrtcvad>=2.0.10
+# webrtcvad-wheels ships prebuilt wheels; plain webrtcvad needs a C compiler on Windows.
+webrtcvad-wheels>=2.0.14
 
 # UI Framework
 PySide6>=6.6.0

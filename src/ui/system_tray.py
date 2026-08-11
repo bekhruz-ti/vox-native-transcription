@@ -11,6 +11,59 @@ from PySide6.QtWidgets import QSystemTrayIcon, QMenu
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen
 from PySide6.QtCore import QObject, Signal, QTimer, Qt, QSize
 
+# Bar geometry is relative to a 48px reference (the tray size) so the same mark
+# can be rendered at any resolution for the application icon.
+_REFERENCE_SIZE = 48
+_BAR_WIDTH = 5
+_BAR_GAP = 2
+_BAR_HEIGHT_RATIOS = (0.35, 0.65, 1.0, 0.65, 0.35)
+
+
+def render_waveform_pixmap(size: int, color: QColor, bg_color: QColor) -> QPixmap:
+    """
+    Draw the waveform-in-a-circle mark shared by the tray and the app icon.
+
+    Args:
+        size: Output edge length in pixels.
+        color: Waveform bar colour.
+        bg_color: Circular background colour.
+
+    Returns:
+        The rendered pixmap with a transparent surround.
+    """
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    painter.setBrush(QBrush(bg_color))
+    painter.setPen(Qt.NoPen)
+    painter.drawEllipse(0, 0, size, size)
+
+    scale = size / _REFERENCE_SIZE
+    bar_width = max(1, round(_BAR_WIDTH * scale))
+    bar_gap = max(1, round(_BAR_GAP * scale))
+    max_height = size * 0.75
+    num_bars = len(_BAR_HEIGHT_RATIOS)
+
+    total_bars_width = num_bars * bar_width + (num_bars - 1) * bar_gap
+    start_x = size / 2 - total_bars_width / 2
+
+    painter.setBrush(QBrush(color))
+    for i, height_ratio in enumerate(_BAR_HEIGHT_RATIOS):
+        bar_height = int(max_height * height_ratio)
+        bar_x = int(start_x + i * (bar_width + bar_gap))
+        bar_y = int(size / 2 - bar_height / 2)
+        painter.drawRoundedRect(
+            bar_x, bar_y,
+            bar_width, bar_height,
+            bar_width / 2, bar_width / 2
+        )
+
+    painter.end()
+    return pixmap
+
 
 class SystemTray(QSystemTrayIcon):
     """
@@ -78,54 +131,7 @@ class SystemTray(QSystemTrayIcon):
         Returns:
             QIcon with the waveform design.
         """
-        pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.transparent)
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        # Draw circular background
-        painter.setBrush(QBrush(self.BG_COLOR))
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(0, 0, size, size)
-        
-        # Draw waveform bars (5 bars with wave pattern) - larger and bolder
-        bar_width = 5
-        bar_gap = 2
-        num_bars = 5
-        
-        # Heights for the wave shape (center is tallest) - taller bars
-        max_height = size * 0.75
-        heights = [0.35, 0.65, 1.0, 0.65, 0.35]
-        
-        # Calculate total width of all bars
-        total_bars_width = num_bars * bar_width + (num_bars - 1) * bar_gap
-        
-        # Center position
-        center_x = size / 2
-        center_y = size / 2
-        
-        # Starting X position (centered)
-        start_x = center_x - total_bars_width / 2
-        
-        # Draw each bar
-        painter.setBrush(QBrush(color))
-        
-        for i, h_ratio in enumerate(heights):
-            bar_height = int(max_height * h_ratio)
-            bar_x = int(start_x + i * (bar_width + bar_gap))
-            bar_y = int(center_y - bar_height / 2)
-            
-            # Draw rounded bar
-            painter.drawRoundedRect(
-                bar_x, bar_y,
-                bar_width, bar_height,
-                bar_width / 2, bar_width / 2
-            )
-        
-        painter.end()
-        
-        return QIcon(pixmap)
+        return QIcon(render_waveform_pixmap(size, color, self.BG_COLOR))
     
     def _create_menu(self) -> None:
         """Create the context menu."""
